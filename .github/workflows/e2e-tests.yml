@@ -24,7 +24,7 @@ jobs:
 
     - name: Create test environment file
       run: |
-        cd streamflow/tests/e2e
+        cd e2e
         cp .env.test .env.test.ci
         cat >> .env.test.ci << EOF
         # CI-specific overrides
@@ -103,16 +103,16 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: streamflow/tests/e2e/package-lock.json
+        cache-dependency-path: e2e/package-lock.json
 
     - name: Install E2E test dependencies
       run: |
-        cd streamflow/tests/e2e
+        cd e2e
         npm ci
 
     - name: Run E2E Tests for Users Service
       run: |
-        cd streamflow/tests/e2e
+        cd e2e
         echo "🧪 Running E2E tests for Users Service..."
         
         # Copy CI environment
@@ -127,7 +127,7 @@ jobs:
     - name: Generate test report
       if: always()
       run: |
-        cd streamflow/tests/e2e
+        cd e2e
         echo "📊 Generating test report..."
         npm run test:coverage -- --testNamePattern="Users Service CRUD E2E" --ci --coverage --watchAll=false --passWithNoTests
 
@@ -137,8 +137,8 @@ jobs:
       with:
         name: e2e-test-results
         path: |
-          streamflow/tests/e2e/coverage/
-          streamflow/tests/e2e/test-results/
+          e2e/coverage/
+          e2e/test-results/
         retention-days: 7
 
     - name: Show service logs on failure
