@@ -111,9 +111,12 @@
   <img src="docs/images/architecture.png" alt="StreamFlow Architecture" width="100%"/>
 </div>
 
-## 📐 Modelo C4 - Arquitectura por Capas
+<details>
+<summary><b>📐 Modelo C4 - Arquitectura por Capas</b></summary>
 
-Los siguientes diagramas siguen el [modelo C4](https://c4model.com/) para documentar la arquitectura del sistema en diferentes niveles de abstracción.
+<p align="justify">
+Los siguientes diagramas siguen el <a href="https://c4model.com/"><b>modelo C4</b></a> para documentar la arquitectura del sistema en diferentes niveles de abstracción.
+</p>
 
 ### 🌍 Nivel 1: Contexto del Sistema
 
@@ -136,7 +139,9 @@ Los siguientes diagramas siguen el [modelo C4](https://c4model.com/) para docume
   <p><em>Detalle interno de los componentes del API Gateway</em></p>
 </div>
 
----
+</details>
+
+![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
 
 ### 🔧 Microservicios
 
