@@ -1,0 +1,62 @@
+syntax = "proto3";
+package videos;
+option go_package = "/pb";
+
+service VideoService {
+  rpc UploadVideo(UploadVideoRequest) returns (VideoResponse);
+  rpc GetVideo(GetVideoRequest) returns (VideoResponse);
+  rpc UpdateVideo(UpdateVideoRequest) returns (VideoResponse);
+  rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+  rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
+}
+
+message UploadVideoRequest {
+  string title = 1;
+  string description = 2;
+  string genre = 3;
+}
+
+message GetVideoRequest {
+  string id = 1;
+}
+
+message UpdateVideoRequest {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string genre = 4;
+}
+
+message DeleteVideoRequest {
+  string id = 1;
+}
+
+message ListVideosRequest {
+  string title = 1;
+  string genre = 2;
+}
+
+message VideoResponse {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string genre = 4;
+  int32 likes_count = 5;
+}
+
+message DeleteVideoResponse {
+  string message = 1;
+}
+
+message ListVideosResponse {
+  repeated Video videos = 1;
+}
+
+message Video {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string genre = 4;
+  string upload_date = 5;
+  int32 likes_count = 6;
+}

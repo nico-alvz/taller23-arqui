@@ -1,0 +1,139 @@
+{
+  "info": {
+    "name": "StreamFlow - Flujo 2: Admin Facturas",
+    "description": "Login admin, ver facturas, marcar como pagada, ver acciones",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Login como administrador",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"{{admin_email}}\", \"password\": \"{{admin_password}}\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (responseBody && pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.environment.set('admin_token', response.access_token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Obtener todas las facturas",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/facturas",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "facturas"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (responseBody && pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.invoices && response.invoices.length > 0) {",
+              "        const pendingInvoice = response.invoices.find(inv => inv.status === 'Pendiente');",
+              "        if (pendingInvoice) {",
+              "            pm.environment.set('invoice_id', pendingInvoice.id);",
+              "        }",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Marcar factura como pagada",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"status\": \"Pagado\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/facturas/{{invoice_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "facturas",
+            "{{invoice_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Ver listado de acciones",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/monitoreo/acciones",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "monitoreo",
+            "acciones"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package BillingService;
+option go_package = "streamflow/services/billing/pb;pb";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Enum for Invoice Status
+enum InvoiceStatus {
+  INVOICE_STATUS_UNSPECIFIED = 0; // Default, should not be used
+  PENDIENTE = 1;
+  PAGADO    = 2;
+  VENCIDO   = 3;
+}
+
+// Message representing an Invoice
+message Invoice {
+  int64 id        = 1;
+  int64 user_id   = 2;
+  InvoiceStatus status = 3;
+  int64 amount    = 4; // Amount to pay (positive integer)
+  google.protobuf.Timestamp issue_date = 5;
+  google.protobuf.Timestamp payment_date = 6;
+}
+
+// ----- Requests & Responses -----
+message CreateInvoiceRequest  { int64 user_id = 1; InvoiceStatus status = 2; int64 amount = 3; }
+message CreateInvoiceResponse { Invoice invoice = 1; }
+
+message GetInvoiceByIdRequest  { int64 id = 1; }
+message GetInvoiceByIdResponse { Invoice invoice = 1; }
+
+message UpdateInvoiceStateRequest  { int64 id = 1; InvoiceStatus new_status = 2; }
+message UpdateInvoiceStateResponse { Invoice invoice = 1; }
+
+message DeleteInvoiceRequest { int64 id = 1; }
+
+message ListInvoicesByUserRequest {
+  // El user_id se deduce desde el contexto/auth metadata.
+  optional InvoiceStatus status_filter = 2;
+}
+message ListInvoicesByUserResponse { repeated Invoice invoices = 1; }
+
+// ----- Service -----
+service BillingService {
+  rpc CreateInvoice        (CreateInvoiceRequest)        returns (CreateInvoiceResponse);
+  rpc GetInvoiceById       (GetInvoiceByIdRequest)       returns (GetInvoiceByIdResponse);
+  rpc UpdateInvoiceState   (UpdateInvoiceStateRequest)   returns (UpdateInvoiceStateResponse);
+  rpc DeleteInvoice        (DeleteInvoiceRequest)        returns (google.protobuf.Empty);
+  rpc ListInvoicesByUser   (ListInvoicesByUserRequest)   returns (ListInvoicesByUserResponse);
+}

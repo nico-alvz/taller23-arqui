@@ -1,0 +1,398 @@
+version: '3.8'
+
+services:
+  # Bases de datos
+  postgres:
+    image: postgres:15
+    container_name: streamflow_postgres
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - streamflow_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres_playlists:
+    image: postgres:15
+    container_name: streamflow_postgres_playlists
+    environment:
+      POSTGRES_DB: playlists_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_playlists_data:/var/lib/postgresql/data
+    networks:
+      - streamflow_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mysql:
+    image: mysql:8.0
+    container_name: streamflow_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: users_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - streamflow_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mariadb:
+    image: mariadb:10.9
+    container_name: streamflow_mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: billing_db
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - streamflow_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb:
+    image: mongo:6.0
+    container_name: streamflow_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - streamflow_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: streamflow_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - streamflow_network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Microservicios
+  auth-service:
+    build: ./services/auth
+    container_name: streamflow_auth
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: auth_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      JWT_SECRET_KEY: streamflow_secret_key_2024
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  users-service:
+    build: ./services/users
+    container_name: streamflow_users
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: users_db
+      DB_USER: root
+      DB_PASSWORD: password
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672/
+      PORT: 50051
+    ports:
+      - "50051:50051"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  billing-service:
+    build: ./services/billing
+    container_name: streamflow_billing
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: billing_db
+      DB_USER: root
+      DB_PASSWORD: password
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672/
+      PORT: 50052
+    ports:
+      - "50052:50052"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  videos-service:
+    build: ./services/videos
+    container_name: streamflow_videos
+    environment:
+      MONGODB_URI: mongodb://root:password@mongodb:27017/videos_db?authSource=admin
+      PORT: 50053
+    ports:
+      - "50053:50053"
+      - "51053:51053"  # HTTP health check
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - /home/nico/Desktop/streamflow/streamflow/protos/
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  monitoring-service:
+    build: ./services/monitoring
+    container_name: streamflow_monitoring
+    environment:
+      MONGODB_URI: mongodb://root:password@mongodb:27017/monitoring_db?authSource=admin
+      PORT: 50054
+    ports:
+      - "50054:50054"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  email-service:
+    build: ./services/email
+    container_name: streamflow_email
+    environment:
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672/
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: streamflow.app.2024@gmail.com
+      SMTP_PASSWORD: your_app_password
+      PORT: 50057
+    ports:
+      - "50057:50057"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  playlists-service:
+    build: ./services/playlists
+    container_name: streamflow_playlists
+    environment:
+      DB_HOST: postgres_playlists
+      DB_PORT: 5432
+      DB_NAME: playlists_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672
+      PORT: 50055
+    ports:
+      - "50055:50055"
+    depends_on:
+      postgres_playlists:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  social-service:
+    build: ./services/social/
+    # Asegúrate de que el Dockerfile esté correctamente configurado para el servicio
+    container_name: streamflow_social
+    environment:
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672
+      MONGODB_URI: mongodb://root:password@mongodb:27017/social_db?authSource=admin
+      PORT: 50056
+    ports:
+      - "50056:50056"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+  # API Gateway (3 instancias)
+  api-gateway-1:
+    build: ./api-gateway
+    container_name: streamflow_gateway_1
+    environment:
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8001
+      USERS_SERVICE_URL: users-service:50051
+      BILLING_SERVICE_URL: billing-service:50052
+      VIDEOS_SERVICE_URL: videos-service:50053
+      MONITORING_SERVICE_URL: monitoring-service:50054
+      EMAIL_SERVICE_URL: email-service:50057
+      JWT_SECRET_KEY: streamflow_secret_key_2024
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - users-service
+      - billing-service
+      - videos-service
+      - monitoring-service
+      - email-service
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  api-gateway-2:
+    build: ./api-gateway
+    container_name: streamflow_gateway_2
+    environment:
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8001
+      USERS_SERVICE_URL: users-service:50051
+      BILLING_SERVICE_URL: billing-service:50052
+      VIDEOS_SERVICE_URL: videos-service:50053
+      MONITORING_SERVICE_URL: monitoring-service:50054
+      EMAIL_SERVICE_URL: email-service:50057
+      JWT_SECRET_KEY: streamflow_secret_key_2024
+    ports:
+      - "8081:8080"
+    depends_on:
+      - auth-service
+      - users-service
+      - billing-service
+      - videos-service
+      - monitoring-service
+      - email-service
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  api-gateway-3:
+    build: ./api-gateway
+    container_name: streamflow_gateway_3
+    environment:
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8001
+      USERS_SERVICE_URL: users-service:50051
+      BILLING_SERVICE_URL: billing-service:50052
+      VIDEOS_SERVICE_URL: videos-service:50053
+      MONITORING_SERVICE_URL: monitoring-service:50054
+      EMAIL_SERVICE_URL: email-service:50057
+      JWT_SECRET_KEY: streamflow_secret_key_2024
+    ports:
+      - "8082:8080"
+    depends_on:
+      - auth-service
+      - users-service
+      - billing-service
+      - videos-service
+      - monitoring-service
+      - email-service
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    build: ./nginx
+    container_name: streamflow_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api-gateway-1
+      - api-gateway-2
+      - api-gateway-3
+    volumes:
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - streamflow_network
+    restart: unless-stopped
+
+  # Seeder (ejecutar manualmente)
+  seeder:
+    image: python:3.11-slim
+    container_name: streamflow_seeder
+    working_dir: /app
+    volumes:
+      - ./scripts:/app
+    command: sleep infinity
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - streamflow_network
+    depends_on:
+      - nginx
+    profiles:
+      - seeder
+
+volumes:
+  postgres_data:
+  postgres_playlists_data:
+  mysql_data:
+  mariadb_data:
+  mongodb_data:
+  rabbitmq_data:
+
+networks:
+  streamflow_network:
+    driver: bridge

@@ -1,0 +1,66 @@
+syntax = "proto3";
+package SocialService;
+import "google/protobuf/timestamp.proto";
+
+option go_package = "Desktop/streamflow/streamflow/services/social/pb/";
+
+// -------------------------
+//  Mensajes de dominio
+// -------------------------
+
+
+message Like {
+  string like_id = 1;
+  string user_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message Comment {
+  string comment_id = 1;
+  string user_id = 2;
+  string content = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// -------------------------
+//  Requests & Responses
+// -------------------------
+
+message LikeVideoRequest {
+  string user_id = 1;
+  string video_id = 2;
+}
+
+message LikeVideoResponse {
+  Like like = 1;
+}
+
+message CommentVideoRequest {
+  string user_id = 1;
+  string video_id = 2;
+  string content = 3;
+}
+
+message CommentVideoResponse {
+  Comment comment = 1;
+}
+
+message GetVideoInteractionsRequest {
+  string user_id = 1;
+  string video_id = 2;
+}
+
+message GetVideoInteractionsResponse {
+  repeated Like likes = 1;
+  repeated Comment comments = 2;
+}
+
+// -------------------------
+//  Servicio gRPC
+// -------------------------
+
+service SocialInteractions {
+  rpc LikeVideo(LikeVideoRequest) returns (LikeVideoResponse);
+  rpc CommentVideo(CommentVideoRequest) returns (CommentVideoResponse);
+  rpc GetVideoInteractions(GetVideoInteractionsRequest) returns (GetVideoInteractionsResponse);
+}

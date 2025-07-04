@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package email;
+option go_package = "streamflow/services/comments/pb;commentspb";
+
+service EmailService {
+  rpc SendWelcomeEmail (WelcomeEmailRequest) returns (EmailResponse);
+  rpc SendInvoiceUpdateEmail (InvoiceEmailRequest) returns (EmailResponse);
+  rpc SendPasswordUpdatedEmail (PasswordEmailRequest) returns (EmailResponse);
+}
+
+message WelcomeEmailRequest {
+  string email = 1;
+  string name = 2;
+}
+
+message InvoiceEmailRequest {
+  string user_email = 1;
+  string invoice_id = 2;
+  double amount = 3;
+  string status = 4;
+}
+
+message PasswordEmailRequest {
+  string user_email = 1;
+  string user_name = 2;
+}
+
+message EmailResponse {
+  bool success = 1;
+  string message = 2;
+}

@@ -1,0 +1,43 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+package MonitoringService;
+option go_package = "monitoring-service/pb";
+
+message ActionLog {
+    int64 id = 1;
+    google.protobuf.Timestamp timestamp = 2;
+    int64 user_id = 3;          // optional
+    string email = 4;           // optional
+    string method = 5;
+    string url = 6;
+    string action = 7;
+}
+
+message ErrorLog {
+    int64 id = 1;
+    google.protobuf.Timestamp timestamp = 2;
+    int64 user_id = 3;          // optional
+    string email = 4;           // optional
+    string error_message = 5;
+}
+
+message ListActionsResponse  { repeated ActionLog actions = 1; }
+message ListErrorsResponse   { repeated ErrorLog  errors  = 1; }
+
+message LogActionRequest {
+  string service = 1;
+  string action = 2;
+  string user_email = 3;
+  string url_method = 4;
+}
+
+message LogActionResponse {
+  // campos de respuesta
+}
+
+service MonitoringService {
+    rpc ListActions(google.protobuf.Empty) returns (ListActionsResponse);
+    rpc ListErrors (google.protobuf.Empty) returns (ListErrorsResponse);
+    rpc LogAction(LogActionRequest) returns (LogActionResponse);
+}

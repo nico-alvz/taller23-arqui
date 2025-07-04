@@ -1,0 +1,51 @@
+{
+  "id": "streamflow-env",
+  "name": "StreamFlow Environment",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "https://localhost",
+      "enabled": true
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@streamflow.com",
+      "enabled": true
+    },
+    {
+      "key": "admin_password",
+      "value": "admin123",
+      "enabled": true
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "user_token",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "video_id",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "invoice_id",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "playlist_id",
+      "value": "",
+      "enabled": true
+    }
+  ]
+}

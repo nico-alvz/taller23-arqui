@@ -1,0 +1,162 @@
+{
+  "info": {
+    "name": "StreamFlow - Flujo 1: Cliente B\u00e1sico",
+    "description": "Obtener videos, registrar usuario, login, obtener video espec\u00edfico y dar like",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Obtener listado de videos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/videos",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "videos"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (responseBody && pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.videos && response.videos.length > 0) {",
+              "        pm.environment.set('video_id', response.videos[0].id);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Registrar nuevo usuario cliente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"first_name\": \"Juan\", \"last_name\": \"P\\u00e9rez\", \"email\": \"juan.perez@test.com\", \"password\": \"password123\", \"confirm_password\": \"password123\", \"role\": \"Cliente\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/usuarios",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "usuarios"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (responseBody && pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.environment.set('user_id', response.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Iniciar sesi\u00f3n con usuario creado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"juan.perez@test.com\", \"password\": \"password123\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (responseBody && pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.environment.set('user_token', response.access_token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Obtener video por ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/videos/{{video_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "videos",
+            "{{video_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Dar like al video",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/interacciones/{{video_id}}/likes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "interacciones",
+            "{{video_id}}",
+            "likes"
+          ]
+        }
+      }
+    }
+  ]
+}

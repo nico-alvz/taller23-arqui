@@ -1,0 +1,278 @@
+{
+  "info": {
+    "name": "StreamFlow - API Completa",
+    "description": "Todos los endpoints de la API StreamFlow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"admin@streamflow.com\", \"password\": \"admin123\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout"
+            }
+          }
+        },
+        {
+          "name": "Cambiar Contrase\u00f1a",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"current_password\": \"admin123\", \"new_password\": \"newpassword123\", \"confirm_new_password\": \"newpassword123\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/usuarios/1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Usuarios",
+      "item": [
+        {
+          "name": "Crear Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"first_name\": \"Test\", \"last_name\": \"User\", \"email\": \"test@example.com\", \"password\": \"password123\", \"confirm_password\": \"password123\", \"role\": \"Cliente\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/usuarios"
+            }
+          }
+        },
+        {
+          "name": "Obtener Usuario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usuarios/{{user_id}}"
+            }
+          }
+        },
+        {
+          "name": "Listar Usuarios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usuarios"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Videos",
+      "item": [
+        {
+          "name": "Listar Videos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/videos"
+            }
+          }
+        },
+        {
+          "name": "Subir Video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"Video de Prueba\", \"description\": \"Descripci\\u00f3n del video de prueba\", \"genre\": \"Comedia\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/videos"
+            }
+          }
+        },
+        {
+          "name": "Obtener Video",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/videos/{{video_id}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Facturas",
+      "item": [
+        {
+          "name": "Crear Factura",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_id\": 1, \"amount\": 29.99, \"status\": \"Pendiente\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/facturas"
+            }
+          }
+        },
+        {
+          "name": "Listar Facturas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/facturas"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Interacciones",
+      "item": [
+        {
+          "name": "Dar Like",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/interacciones/{{video_id}}/likes"
+            }
+          }
+        },
+        {
+          "name": "Comentar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"comment\": \"\\u00a1Excelente video!\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/interacciones/{{video_id}}/comentarios"
+            }
+          }
+        },
+        {
+          "name": "Ver Interacciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/interacciones/{{video_id}}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
