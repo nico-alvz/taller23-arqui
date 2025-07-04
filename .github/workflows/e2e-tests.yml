@@ -1,0 +1,217 @@
+name: E2E Tests - Users Service
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'streamflow/services/users/**'
+      - 'streamflow/api-gateway/**'
+      - 'streamflow/services/auth/**'
+      - 'streamflow/tests/e2e/**'
+      - 'streamflow/docker-compose.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'streamflow/services/users/**'
+      - 'streamflow/api-gateway/**'
+      - 'streamflow/services/auth/**'
+      - 'streamflow/tests/e2e/**'
+      - 'streamflow/docker-compose.yml'
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Create test environment file
+      run: |
+        cd streamflow/tests/e2e
+        cp .env.test .env.test.ci
+        cat >> .env.test.ci << EOF
+        # CI-specific overrides
+        BASE_URL=http://localhost:80
+        API_BASE_URL=http://localhost:8080
+        AUTH_SERVICE_URL=http://localhost:8001
+        TEST_TIMEOUT=45000
+        HEALTH_CHECK_RETRIES=15
+        HEALTH_CHECK_DELAY=10000
+        EOF
+
+    - name: Start StreamFlow services
+      run: |
+        cd streamflow
+        echo "🚀 Starting StreamFlow services..."
+        docker-compose up -d
+        echo "⏳ Waiting for services to be ready..."
+        sleep 30
+
+    - name: Check service health
+      run: |
+        cd streamflow
+        echo "🔍 Checking service health..."
+        
+        # Check individual services
+        for service in postgres mysql mariadb mongodb rabbitmq; do
+          echo "Checking $service..."
+          docker-compose ps $service
+          if ! docker-compose ps $service | grep -q "Up"; then
+            echo "❌ $service is not running properly"
+            docker-compose logs $service
+            exit 1
+          fi
+        done
+        
+        # Wait for application services
+        sleep 60
+        
+        # Check application services
+        for service in auth-service users-service api-gateway-1 nginx; do
+          echo "Checking $service..."
+          docker-compose ps $service
+          if ! docker-compose ps $service | grep -q "Up"; then
+            echo "❌ $service is not running properly"
+            docker-compose logs $service
+            exit 1
+          fi
+        done
+
+    - name: Wait for API Gateway to be ready
+      run: |
+        echo "⏳ Waiting for API Gateway to be ready..."
+        max_attempts=30
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          if curl -f http://localhost:80/health > /dev/null 2>&1; then
+            echo "✅ API Gateway is ready!"
+            break
+          fi
+          
+          echo "Attempt $attempt/$max_attempts: API Gateway not ready yet..."
+          sleep 10
+          attempt=$((attempt + 1))
+        done
+        
+        if [ $attempt -gt $max_attempts ]; then
+          echo "❌ API Gateway failed to become ready"
+          docker-compose logs nginx
+          docker-compose logs api-gateway-1
+          exit 1
+        fi
+
+    - name: Setup Node.js for E2E tests
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: streamflow/tests/e2e/package-lock.json
+
+    - name: Install E2E test dependencies
+      run: |
+        cd streamflow/tests/e2e
+        npm ci
+
+    - name: Run E2E Tests for Users Service
+      run: |
+        cd streamflow/tests/e2e
+        echo "🧪 Running E2E tests for Users Service..."
+        
+        # Copy CI environment
+        cp .env.test.ci .env.test
+        
+        # Run specific tests for the required endpoints
+        npm test -- --testNamePattern="Users Service CRUD E2E" --verbose
+      env:
+        NODE_ENV: test
+        CI: true
+
+    - name: Generate test report
+      if: always()
+      run: |
+        cd streamflow/tests/e2e
+        echo "📊 Generating test report..."
+        npm run test:coverage -- --testNamePattern="Users Service CRUD E2E" --ci --coverage --watchAll=false --passWithNoTests
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results
+        path: |
+          streamflow/tests/e2e/coverage/
+          streamflow/tests/e2e/test-results/
+        retention-days: 7
+
+    - name: Show service logs on failure
+      if: failure()
+      run: |
+        cd streamflow
+        echo "❌ Tests failed. Showing service logs..."
+        echo "=== Nginx logs ==="
+        docker-compose logs nginx
+        echo "=== API Gateway logs ==="
+        docker-compose logs api-gateway-1
+        echo "=== Auth service logs ==="
+        docker-compose logs auth-service
+        echo "=== Users service logs ==="
+        docker-compose logs users-service
+        echo "=== PostgreSQL logs ==="
+        docker-compose logs postgres
+        echo "=== MySQL logs ==="
+        docker-compose logs mysql
+
+    - name: Cleanup
+      if: always()
+      run: |
+        cd streamflow
+        echo "🧹 Cleaning up..."
+        docker-compose down -v
+        docker system prune -f
+
+  # Job de notificación de éxito
+  notify-success:
+    needs: e2e-tests
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+    - name: Notify success
+      run: |
+        echo "✅ E2E Tests for Users Service completed successfully!"
+        echo "All required endpoints have been tested:"
+        echo "- POST /auth/login (success & error cases)"
+        echo "- POST /usuarios (success & error cases)"
+        echo "- GET /usuarios/{id} (success & error cases)"
+        echo "- PATCH /usuarios/{id} (success & error cases)"
+        echo "- DELETE /usuarios/{id} (success & error cases)"
+        echo "- GET /usuarios (success & error cases)"
+
+  # Job de notificación de fallo
+  notify-failure:
+    needs: e2e-tests
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+    - name: Notify failure
+      run: |
+        echo "❌ E2E Tests for Users Service failed!"
+        echo "Please check the test logs and service logs for details."
+        echo "The following endpoints need to be working correctly:"
+        echo "- POST /auth/login"
+        echo "- POST /usuarios"
+        echo "- GET /usuarios/{id}"
+        echo "- PATCH /usuarios/{id}"
+        echo "- DELETE /usuarios/{id}"
+        echo "- GET /usuarios"
+        exit 1
+
