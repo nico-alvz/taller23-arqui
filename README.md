@@ -261,3 +261,4 @@ Se incluyen colecciones Postman para probar los flujos principales:
 ## Licencia
 
 Este proyecto es para fines educativos del curso de Arquitectura de Sistemas.
+# StreamFlow Platform - Trigger E2E Tests

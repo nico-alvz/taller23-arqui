@@ -148,6 +148,7 @@ services:
       DB_NAME: users_db
       DB_USER: root
       DB_PASSWORD: password
+      MONGODB_URI: mongodb://root:password@mongodb:27017/users_db?authSource=admin
       RABBITMQ_URL: amqp://admin:password@rabbitmq:5672/
       PORT: 50051
     ports:

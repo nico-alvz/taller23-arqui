@@ -1,0 +1,165 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'streamflow/services/**'
+      - 'streamflow/api-gateway/**'
+      - 'streamflow/nginx/**'
+      - 'streamflow/docker-compose.yml'
+      - '.github/workflows/docker-build.yml'
+
+env:
+  REGISTRY: docker.io
+  
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        service:
+          - name: auth-service
+            context: ./streamflow/services/auth
+            image: streamflow/auth-service
+          - name: users-service  
+            context: ./streamflow/services/users
+            image: streamflow/users-service
+          - name: billing-service
+            context: ./streamflow/services/billing
+            image: streamflow/billing-service
+          - name: videos-service
+            context: ./streamflow/services/videos
+            image: streamflow/videos-service
+          - name: monitoring-service
+            context: ./streamflow/services/monitoring
+            image: streamflow/monitoring-service
+          - name: email-service
+            context: ./streamflow/services/email
+            image: streamflow/email-service
+          - name: playlists-service
+            context: ./streamflow/services/playlists
+            image: streamflow/playlists-service
+          - name: social-service
+            context: ./streamflow/services/social
+            image: streamflow/social-service
+          - name: api-gateway
+            context: ./streamflow/api-gateway
+            image: streamflow/api-gateway
+          - name: nginx
+            context: ./streamflow/nginx
+            image: streamflow/nginx
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ matrix.service.image }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Check if Dockerfile exists
+      run: |
+        if [ ! -f "${{ matrix.service.context }}/Dockerfile" ]; then
+          echo "❌ Dockerfile not found in ${{ matrix.service.context }}"
+          exit 1
+        fi
+        echo "✅ Dockerfile found for ${{ matrix.service.name }}"
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.service.context }}
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Image vulnerability scan
+      uses: aquasecurity/trivy-action@master
+      continue-on-error: true
+      with:
+        image-ref: ${{ matrix.service.image }}:latest
+        format: 'sarif'
+        output: 'trivy-results-${{ matrix.service.name }}.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      continue-on-error: true
+      with:
+        sarif_file: 'trivy-results-${{ matrix.service.name }}.sarif'
+
+  # Job de notificación de éxito
+  notify-success:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+    - name: Notify success
+      run: |
+        echo "✅ All Docker images built and pushed successfully!"
+        echo "Images are available on Docker Hub with tags:"
+        echo "- Latest (from main branch)"
+        echo "- SHA-tagged for this specific commit"
+        echo ""
+        echo "Services updated:"
+        echo "- Auth Service"
+        echo "- Users Service"  
+        echo "- Billing Service"
+        echo "- Videos Service"
+        echo "- Monitoring Service"
+        echo "- Email Service"
+        echo "- Playlists Service"
+        echo "- Social Service"
+        echo "- API Gateway"
+        echo "- Nginx Load Balancer"
+
+  # Job de notificación de fallo
+  notify-failure:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+    - name: Notify failure
+      run: |
+        echo "❌ Docker image build/push failed!"
+        echo "Please check the build logs for specific errors."
+        echo "Common issues:"
+        echo "- Missing Dockerfile in service directory"
+        echo "- Docker Hub credentials not configured"
+        echo "- Build errors in service code"
+        echo "- Network issues during push"
+        exit 1
+
+  # Job para limpiar imágenes antiguas (opcional)
+  cleanup-old-images:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+    - name: Delete old Docker Hub images
+      continue-on-error: true
+      run: |
+        echo "🧹 Cleanup step - would delete old images here"
+        echo "This can be implemented using Docker Hub API"
+        echo "to remove images older than X days/versions"
+

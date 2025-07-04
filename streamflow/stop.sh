@@ -2,6 +2,6 @@
 
 echo "🛑 Deteniendo StreamFlow Microservices..."
 
-docker-compose down
+docker compose down
 
 echo "✅ StreamFlow detenido"

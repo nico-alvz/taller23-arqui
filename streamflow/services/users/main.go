@@ -8,9 +8,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"time"
 
     "go.mongodb.org/mongo-driver/bson"
+    "go.mongodb.org/mongo-driver/bson/primitive"
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/mongo/options"
 
@@ -141,21 +143,60 @@ func (s *server) publishEvent(eventType string, data interface{}) error {
     return err
 }
 
+// isValidEmail validates email format
+func isValidEmail(email string) bool {
+    emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+    return emailRegex.MatchString(email)
+}
+
 // CreateUser
 func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.UserResponse, error) {
+    // Validar formato de email
+    if !isValidEmail(req.Email) {
+        return nil, status.Errorf(codes.InvalidArgument, "Formato de email inválido")
+    }
+    
+    // Verificar que las contraseñas coincidan
+    if req.Password != req.ConfirmPassword {
+        return nil, status.Errorf(codes.InvalidArgument, "Las contraseñas no coinciden")
+    }
+    
+    // Verificar email único
+    existing := s.col.FindOne(ctx, bson.M{"email": req.Email, "deleted_at": bson.M{"$exists": false}})
+    if existing.Err() == nil {
+        return nil, status.Errorf(codes.AlreadyExists, "El email ya está registrado")
+    }
+    
+    // Hash de la contraseña (simplificado para el ejemplo)
+    hashedPassword := req.Password // En producción, usar bcrypt
+    
     user := bson.M{
         "first_name": req.FirstName,
         "last_name":  req.LastName,
         "email":      req.Email,
+        "password":   hashedPassword,
         "role":       req.Role,
         "created_at": time.Now().Format(time.RFC3339),
     }
-    _, err := s.col.InsertOne(ctx, user)
+    
+    result, err := s.col.InsertOne(ctx, user)
     if err != nil {
         return nil, status.Errorf(codes.Internal, "DB insert error: %v", err)
     }
+    
+    // Convertir ObjectID a int32 usando hash
+    objectID := result.InsertedID.(primitive.ObjectID)
+    userID := int32(objectID.Timestamp().Unix()) // Simplificado
+    
+    // Publicar evento
+    eventData := map[string]interface{}{
+        "email": req.Email,
+        "name":  req.FirstName + " " + req.LastName,
+    }
+    s.publishEvent("user.created", eventData)
+    
     return &pb.UserResponse{
-        Id:        0, // Si usas int32, deberás mapear el ObjectID a int32 o cambiar el proto a string
+        Id:        userID,
         FirstName: req.FirstName,
         LastName:  req.LastName,
         Email:     req.Email,
@@ -166,26 +207,76 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 
 // GetUser
 func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserResponse, error) {
-    var user bson.M
-    err := s.col.FindOne(ctx, bson.M{"id": req.Id}).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        return nil, status.Errorf(codes.NotFound, "Usuario no encontrado")
-    }
+    // Buscar usuarios por timestamp (nuestro mapeo int32) - excluir eliminados
+    cursor, err := s.col.Find(ctx, bson.M{"deleted_at": bson.M{"$exists": false}})
     if err != nil {
         return nil, status.Errorf(codes.Internal, "DB error: %v", err)
     }
-    return &pb.UserResponse{
-        Id:        req.Id,
-        FirstName: user["first_name"].(string),
-        LastName:  user["last_name"].(string),
-        Email:     user["email"].(string),
-        Role:      user["role"].(string),
-        CreatedAt: user["created_at"].(string),
-    }, nil
+    defer cursor.Close(ctx)
+    
+    for cursor.Next(ctx) {
+        var user bson.M
+        if err := cursor.Decode(&user); err != nil {
+            continue
+        }
+        
+        // Verificar si el ObjectID coincide con nuestro ID mapeado
+        if objectID, ok := user["_id"].(primitive.ObjectID); ok {
+            userID := int32(objectID.Timestamp().Unix())
+            if userID == req.Id {
+                return &pb.UserResponse{
+                    Id:        req.Id,
+                    FirstName: user["first_name"].(string),
+                    LastName:  user["last_name"].(string),
+                    Email:     user["email"].(string),
+                    Role:      user["role"].(string),
+                    CreatedAt: user["created_at"].(string),
+                }, nil
+            }
+        }
+    }
+    
+    return nil, status.Errorf(codes.NotFound, "Usuario no encontrado")
 }
 
 // UpdateUser
 func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UserResponse, error) {
+    // Validar formato de email básico
+    if req.Email != "" && !isValidEmail(req.Email) {
+        return nil, status.Errorf(codes.InvalidArgument, "Formato de email inválido")
+    }
+    
+    // Buscar el usuario primero para encontrar su ObjectID - excluir eliminados
+    cursor, err := s.col.Find(ctx, bson.M{"deleted_at": bson.M{"$exists": false}})
+    if err != nil {
+        return nil, status.Errorf(codes.Internal, "DB error: %v", err)
+    }
+    defer cursor.Close(ctx)
+    
+    var targetObjectID primitive.ObjectID
+    var found bool
+    
+    for cursor.Next(ctx) {
+        var user bson.M
+        if err := cursor.Decode(&user); err != nil {
+            continue
+        }
+        
+        if objectID, ok := user["_id"].(primitive.ObjectID); ok {
+            userID := int32(objectID.Timestamp().Unix())
+            if userID == req.Id {
+                targetObjectID = objectID
+                found = true
+                break
+            }
+        }
+    }
+    
+    if !found {
+        return nil, status.Errorf(codes.NotFound, "Usuario no encontrado")
+    }
+    
+    // Actualizar usando el ObjectID real
     update := bson.M{
         "$set": bson.M{
             "first_name": req.FirstName,
@@ -193,39 +284,79 @@ func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb
             "email":      req.Email,
         },
     }
-    var user bson.M
-    err := s.col.FindOneAndUpdate(ctx, bson.M{"id": req.Id}, update).Decode(&user)
-    if err == mongo.ErrNoDocuments {
-        return nil, status.Errorf(codes.NotFound, "Usuario no encontrado")
-    }
+    
+    var updatedUser bson.M
+    err = s.col.FindOneAndUpdate(
+        ctx, 
+        bson.M{"_id": targetObjectID}, 
+        update,
+        options.FindOneAndUpdate().SetReturnDocument(options.After),
+    ).Decode(&updatedUser)
+    
     if err != nil {
-        return nil, status.Errorf(codes.Internal, "DB error: %v", err)
+        return nil, status.Errorf(codes.Internal, "DB update error: %v", err)
     }
+    
     return &pb.UserResponse{
         Id:        req.Id,
         FirstName: req.FirstName,
         LastName:  req.LastName,
         Email:     req.Email,
-        Role:      user["role"].(string),
-        CreatedAt: user["created_at"].(string),
+        Role:      updatedUser["role"].(string),
+        CreatedAt: updatedUser["created_at"].(string),
     }, nil
 }
 
-// DeleteUser
+// DeleteUser - Implementa soft delete
 func (s *server) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
-    res, err := s.col.DeleteOne(ctx, bson.M{"id": req.Id})
+    // Buscar el usuario primero para encontrar su ObjectID - excluir ya eliminados
+    cursor, err := s.col.Find(ctx, bson.M{"deleted_at": bson.M{"$exists": false}})
     if err != nil {
         return nil, status.Errorf(codes.Internal, "DB error: %v", err)
     }
-    if res.DeletedCount == 0 {
+    defer cursor.Close(ctx)
+    
+    var targetObjectID primitive.ObjectID
+    var found bool
+    
+    for cursor.Next(ctx) {
+        var user bson.M
+        if err := cursor.Decode(&user); err != nil {
+            continue
+        }
+        
+        if objectID, ok := user["_id"].(primitive.ObjectID); ok {
+            userID := int32(objectID.Timestamp().Unix())
+            if userID == req.Id {
+                targetObjectID = objectID
+                found = true
+                break
+            }
+        }
+    }
+    
+    if !found {
         return nil, status.Errorf(codes.NotFound, "Usuario no encontrado")
     }
-    return &pb.DeleteUserResponse{Message: "Usuario eliminado"}, nil
+    
+    // Soft delete: marcar como eliminado
+    update := bson.M{
+        "$set": bson.M{
+            "deleted_at": time.Now().Format(time.RFC3339),
+        },
+    }
+    
+    _, err = s.col.UpdateOne(ctx, bson.M{"_id": targetObjectID}, update)
+    if err != nil {
+        return nil, status.Errorf(codes.Internal, "DB delete error: %v", err)
+    }
+    
+    return &pb.DeleteUserResponse{Message: "Usuario eliminado exitosamente"}, nil
 }
 
 // ListUsers
 func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
-    filter := bson.M{}
+    filter := bson.M{"deleted_at": bson.M{"$exists": false}} // Excluir eliminados
     if req.Email != "" {
         filter["email"] = req.Email
     }
@@ -243,7 +374,7 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
         var user bson.M
         if err := cur.Decode(&user); err == nil {
             users = append(users, &pb.UserResponse{
-                Id:        int32(user["id"].(int)), // Ajusta según tu modelo
+Id:        int32(user["_id"].(primitive.ObjectID).Timestamp().Unix()),
                 FirstName: user["first_name"].(string),
                 LastName:  user["last_name"].(string),
                 Email:     user["email"].(string),
@@ -265,7 +396,8 @@ func main() {
     defer rabbitmq.Close()
 
     // Inicializa Mongo si usas la colección
-    mongoClient, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+    mongoURI := getEnv("MONGODB_URI", "mongodb://localhost:27017")
+    mongoClient, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURI))
     if err != nil {
         log.Fatal("Error connecting to MongoDB:", err)
     }

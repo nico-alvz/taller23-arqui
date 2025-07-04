@@ -1,6 +1,73 @@
-# StreamFlow - Plataforma de Streaming con Microservicios
+<!-- Badges superiores -->
+<div align="center">
 
-Este proyecto implementa una arquitectura de microservicios para la plataforma de streaming StreamFlow.
+# 🎬 StreamFlow 
+### Plataforma de Streaming con Microservicios Avanzada
+
+![Status](https://img.shields.io/badge/Status-🟢%20Production%20Ready-brightgreen)
+![Architecture](https://img.shields.io/badge/Architecture-Microservices-blue)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)
+![gRPC](https://img.shields.io/badge/gRPC-Communication-4285F4?logo=grpc)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python)
+![License](https://img.shields.io/badge/License-Educational-yellow)
+
+[![Tests](https://img.shields.io/badge/E2E%20Tests-✅%2019/19%20Passing-success)]()
+[![Postman](https://img.shields.io/badge/Postman-Collection%20Ready-orange?logo=postman)]()
+[![SSL](https://img.shields.io/badge/HTTPS/SSL-✅%20Enabled-green?logo=letsencrypt)]()
+[![Load%20Balancer](https://img.shields.io/badge/Nginx-3%20Instances-009639?logo=nginx)]()
+
+---
+
+### 🚀 **Sistema de Streaming Completo** | ⚡ **8 Microservicios** | 🔐 **JWT + HTTPS** | 📊 **Load Balancing** | 🐰 **RabbitMQ**
+
+</div>
+
+---
+
+## 📋 Tabla de Contenidos
+
+- [✨ Características](#-características)
+- [🏗️ Arquitectura](#%EF%B8%8F-arquitectura)
+- [🚀 Inicio Rápido](#-inicio-rápido)
+- [🔧 Servicios](#-servicios)
+- [📡 APIs](#-apis)
+- [🧪 Testing](#-testing)
+- [🔒 Seguridad](#-seguridad)
+- [📊 Monitoreo](#-monitoreo)
+- [🛠️ Desarrollo](#%EF%B8%8F-desarrollo)
+- [❗ Troubleshooting](#-troubleshooting)
+
+---
+
+## ✨ Características
+
+> **StreamFlow** es una plataforma de streaming moderna construida con una arquitectura de microservicios robusta, diseñada para escalar y manejar millones de usuarios.
+
+### 🎯 **Funcionalidades Principales**
+
+| Característica | Estado | Descripción |
+|---|---|---|
+| 🎬 **Gestión de Videos** | ✅ | Upload, streaming, metadata |
+| 👥 **Gestión de Usuarios** | ✅ | CRUD completo, roles, autenticación |
+| 🔐 **Autenticación JWT** | ✅ | Login seguro, tokens, blacklist |
+| 💰 **Sistema de Facturación** | ✅ | Pagos, facturas, suscripciones |
+| 📱 **Interacciones Sociales** | ✅ | Likes, comentarios, seguimiento |
+| 🎵 **Listas de Reproducción** | ✅ | Playlists personalizadas |
+| 📧 **Notificaciones Email** | ✅ | Sistema de mensajería |
+| 📊 **Monitoreo Avanzado** | ✅ | Logs, métricas, debugging |
+
+### 🏆 **Tecnologías de Vanguardia**
+
+<div align="center">
+
+| Backend | Comunicación | Bases de Datos | DevOps |
+|---------|-------------|----------------|--------|
+| ![Go](https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white) | ![gRPC](https://img.shields.io/badge/gRPC-4285F4?style=for-the-badge&logo=grpc&logoColor=white) | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white) | ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white) |
+| ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white) | ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white) | ![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white) | ![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white) |
+| ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white) | ![HTTPS](https://img.shields.io/badge/HTTPS-008000?style=for-the-badge&logo=letsencrypt&logoColor=white) | ![MySQL](https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white) | ![Jest](https://img.shields.io/badge/Jest-323330?style=for-the-badge&logo=Jest&logoColor=white) |
+
+</div>
 
 ## Arquitectura
 

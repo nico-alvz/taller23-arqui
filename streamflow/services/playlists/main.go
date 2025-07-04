@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -47,42 +47,54 @@ func getenv(k, d string) string {
 func cfg() dbCfg {
 	return dbCfg{
 		Host: getenv("DB_HOST", "localhost"),
-		Port: getenv("DB_PORT", "3306"),
+		Port: getenv("DB_PORT", "5432"),
 		Name: getenv("DB_NAME", "playlists_db"),
-		User: getenv("DB_USER", "root"),
+		User: getenv("DB_USER", "postgres"),
 		Pass: getenv("DB_PASSWORD", "password"),
 	}
 }
 func (c dbCfg) dsn() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci", c.User, c.Pass, c.Host, c.Port, c.Name)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", c.Host, c.Port, c.User, c.Pass, c.Name)
 }
 
 var db *sql.DB
 
 func initSchema() error {
 	const q1 = `CREATE TABLE IF NOT EXISTS playlists (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        owner_id INT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        owner_id INTEGER NOT NULL,
         name VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL,
-        INDEX idx_owner (owner_id),
-        INDEX idx_deleted (deleted_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+        deleted_at TIMESTAMP NULL
+    )`
 	const q2 = `CREATE TABLE IF NOT EXISTS playlist_videos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        playlist_id INT NOT NULL,
-        video_id INT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        playlist_id INTEGER NOT NULL,
+        video_id INTEGER NOT NULL,
         added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP NULL,
-        UNIQUE KEY uniq_video_per_playlist (playlist_id, video_id),
-        INDEX idx_playlist (playlist_id),
-        INDEX idx_deleted (deleted_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+        UNIQUE (playlist_id, video_id)
+    )`
+	const q3 = `CREATE INDEX IF NOT EXISTS idx_playlists_owner ON playlists (owner_id)`
+	const q4 = `CREATE INDEX IF NOT EXISTS idx_playlists_deleted ON playlists (deleted_at)`
+	const q5 = `CREATE INDEX IF NOT EXISTS idx_playlist_videos_playlist ON playlist_videos (playlist_id)`
+	const q6 = `CREATE INDEX IF NOT EXISTS idx_playlist_videos_deleted ON playlist_videos (deleted_at)`
 	if _, err := db.Exec(q1); err != nil {
 		return err
 	}
 	if _, err := db.Exec(q2); err != nil {
+		return err
+	}
+	if _, err := db.Exec(q3); err != nil {
+		return err
+	}
+	if _, err := db.Exec(q4); err != nil {
+		return err
+	}
+	if _, err := db.Exec(q5); err != nil {
+		return err
+	}
+	if _, err := db.Exec(q6); err != nil {
 		return err
 	}
 	return nil
@@ -125,11 +137,11 @@ func (s *srv) CreatePlaylist(ctx context.Context, req *pb.CreatePlaylistRequest)
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name required")
 	}
-	res, err := db.ExecContext(ctx, `INSERT INTO playlists (owner_id, name) VALUES (?, ?)`, auth.userID, req.Name)
+	var id int64
+	err = db.QueryRowContext(ctx, `INSERT INTO playlists (owner_id, name) VALUES ($1, $2) RETURNING id`, auth.userID, req.Name).Scan(&id)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "insert: %v", err)
 	}
-	id, _ := res.LastInsertId()
 	p := &pb.Playlist{Id: id, OwnerId: auth.userID, Name: req.Name, CreatedAt: timestamppb.Now()}
 	return &pb.CreatePlaylistResponse{Playlist: p}, nil
 }
@@ -142,7 +154,7 @@ func (s *srv) AddVideo(ctx context.Context, req *pb.AddVideoRequest) (*pb.AddVid
 	}
 	// Verify ownership
 	var ownerID int64
-	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = ? AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
+	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = $1 AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		return nil, status.Error(codes.NotFound, "playlist not found")
 	} else if err != nil {
@@ -151,7 +163,7 @@ func (s *srv) AddVideo(ctx context.Context, req *pb.AddVideoRequest) (*pb.AddVid
 	if ownerID != auth.userID {
 		return nil, status.Error(codes.PermissionDenied, "not owner")
 	}
-	_, err = db.ExecContext(ctx, `INSERT IGNORE INTO playlist_videos (playlist_id, video_id) VALUES (?, ?)`, req.PlaylistId, req.VideoId)
+	_, err = db.ExecContext(ctx, `INSERT INTO playlist_videos (playlist_id, video_id) VALUES ($1, $2)`, req.PlaylistId, req.VideoId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "insert: %v", err)
 	}
@@ -170,7 +182,7 @@ func (s *srv) RemoveVideo(ctx context.Context, req *pb.RemoveVideoRequest) (*pb.
 	}
 	// Verify ownership
 	var ownerID int64
-	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = ? AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
+	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = $1 AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		return nil, status.Error(codes.NotFound, "playlist not found")
 	}
@@ -180,7 +192,7 @@ func (s *srv) RemoveVideo(ctx context.Context, req *pb.RemoveVideoRequest) (*pb.
 	if ownerID != auth.userID {
 		return nil, status.Error(codes.PermissionDenied, "not owner")
 	}
-	_, err = db.ExecContext(ctx, `UPDATE playlist_videos SET deleted_at = NOW() WHERE playlist_id = ? AND video_id = ? AND deleted_at IS NULL`, req.PlaylistId, req.VideoId)
+	_, err = db.ExecContext(ctx, `UPDATE playlist_videos SET deleted_at = NOW() WHERE playlist_id = $1 AND video_id = $2 AND deleted_at IS NULL`, req.PlaylistId, req.VideoId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
 	}
@@ -197,7 +209,7 @@ func (s *srv) ListPlaylists(ctx context.Context, _ *emptypb.Empty) (*pb.ListPlay
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id, name, created_at FROM playlists WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at DESC`, auth.userID)
+	rows, err := db.QueryContext(ctx, `SELECT id, name, created_at FROM playlists WHERE owner_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`, auth.userID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "query: %v", err)
 	}
@@ -223,7 +235,7 @@ func (s *srv) ListVideos(ctx context.Context, req *pb.ListVideosRequest) (*pb.Li
 	}
 	// verify owner
 	var ownerID int64
-	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = ? AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
+	err = db.QueryRowContext(ctx, `SELECT owner_id FROM playlists WHERE id = $1 AND deleted_at IS NULL`, req.PlaylistId).Scan(&ownerID)
 	if err == sql.ErrNoRows {
 		return nil, status.Error(codes.NotFound, "playlist not found")
 	}
@@ -234,7 +246,7 @@ func (s *srv) ListVideos(ctx context.Context, req *pb.ListVideosRequest) (*pb.Li
 		return nil, status.Error(codes.PermissionDenied, "not owner")
 	}
 
-	rows, err := db.QueryContext(ctx, `SELECT video_id FROM playlist_videos WHERE playlist_id = ? AND deleted_at IS NULL`, req.PlaylistId)
+	rows, err := db.QueryContext(ctx, `SELECT video_id FROM playlist_videos WHERE playlist_id = $1 AND deleted_at IS NULL`, req.PlaylistId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "query: %v", err)
 	}
@@ -257,7 +269,7 @@ func (s *srv) DeletePlaylist(ctx context.Context, req *pb.DeletePlaylistRequest)
 		return nil, err
 	}
 	// verify owner
-	res, err := db.ExecContext(ctx, `UPDATE playlists SET deleted_at = NOW() WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`, req.PlaylistId, auth.userID)
+	res, err := db.ExecContext(ctx, `UPDATE playlists SET deleted_at = NOW() WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`, req.PlaylistId, auth.userID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
 	}
@@ -273,7 +285,7 @@ func (s *srv) buildPlaylistResponse(ctx context.Context, pid int64) (*pb.AddVide
 	var name string
 	var ts time.Time
 	var owner int64
-	err := db.QueryRowContext(ctx, `SELECT owner_id, name, created_at FROM playlists WHERE id = ?`, pid).Scan(&owner, &name, &ts)
+	err := db.QueryRowContext(ctx, `SELECT owner_id, name, created_at FROM playlists WHERE id = $1`, pid).Scan(&owner, &name, &ts)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "select: %v", err)
 	}
@@ -285,7 +297,7 @@ func (s *srv) buildPlaylistResponse(ctx context.Context, pid int64) (*pb.AddVide
 func main() {
 	c := cfg()
 	var err error
-	db, err = sql.Open("mysql", c.dsn())
+	db, err = sql.Open("postgres", c.dsn())
 	if err != nil {
 		log.Fatalf("db open: %v", err)
 	}

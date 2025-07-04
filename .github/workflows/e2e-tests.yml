@@ -3,20 +3,8 @@ name: E2E Tests - Users Service
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'streamflow/services/users/**'
-      - 'streamflow/api-gateway/**'
-      - 'streamflow/services/auth/**'
-      - 'streamflow/tests/e2e/**'
-      - 'streamflow/docker-compose.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'streamflow/services/users/**'
-      - 'streamflow/api-gateway/**'
-      - 'streamflow/services/auth/**'
-      - 'streamflow/tests/e2e/**'
-      - 'streamflow/docker-compose.yml'
 
 env:
   DOCKER_BUILDKIT: 1
@@ -52,7 +40,7 @@ jobs:
       run: |
         cd streamflow
         echo "🚀 Starting StreamFlow services..."
-        docker-compose up -d
+        docker compose up -d
         echo "⏳ Waiting for services to be ready..."
         sleep 30
 
@@ -64,10 +52,10 @@ jobs:
         # Check individual services
         for service in postgres mysql mariadb mongodb rabbitmq; do
           echo "Checking $service..."
-          docker-compose ps $service
-          if ! docker-compose ps $service | grep -q "Up"; then
+          docker compose ps $service
+          if ! docker compose ps $service | grep -q "Up"; then
             echo "❌ $service is not running properly"
-            docker-compose logs $service
+            docker compose logs $service
             exit 1
           fi
         done
@@ -78,10 +66,10 @@ jobs:
         # Check application services
         for service in auth-service users-service api-gateway-1 nginx; do
           echo "Checking $service..."
-          docker-compose ps $service
-          if ! docker-compose ps $service | grep -q "Up"; then
+          docker compose ps $service
+          if ! docker compose ps $service | grep -q "Up"; then
             echo "❌ $service is not running properly"
-            docker-compose logs $service
+            docker compose logs $service
             exit 1
           fi
         done
@@ -105,8 +93,8 @@ jobs:
         
         if [ $attempt -gt $max_attempts ]; then
           echo "❌ API Gateway failed to become ready"
-          docker-compose logs nginx
-          docker-compose logs api-gateway-1
+          docker compose logs nginx
+          docker compose logs api-gateway-1
           exit 1
         fi
 
@@ -159,24 +147,24 @@ jobs:
         cd streamflow
         echo "❌ Tests failed. Showing service logs..."
         echo "=== Nginx logs ==="
-        docker-compose logs nginx
+        docker compose logs nginx
         echo "=== API Gateway logs ==="
-        docker-compose logs api-gateway-1
+        docker compose logs api-gateway-1
         echo "=== Auth service logs ==="
-        docker-compose logs auth-service
+        docker compose logs auth-service
         echo "=== Users service logs ==="
-        docker-compose logs users-service
+        docker compose logs users-service
         echo "=== PostgreSQL logs ==="
-        docker-compose logs postgres
+        docker compose logs postgres
         echo "=== MySQL logs ==="
-        docker-compose logs mysql
+        docker compose logs mysql
 
     - name: Cleanup
       if: always()
       run: |
         cd streamflow
         echo "🧹 Cleaning up..."
-        docker-compose down -v
+        docker compose down -v
         docker system prune -f
 
   # Job de notificación de éxito

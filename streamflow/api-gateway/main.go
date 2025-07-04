@@ -1,14 +1,22 @@
 package main
 
 import (
+    "context"
     "log"
     "net/http"
     "os"
+    "strconv"
     "strings"
+    "time"
     "bytes"
     "io"
     "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v4"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/credentials/insecure"
+    "google.golang.org/grpc/status"
+    "api-gateway/pb"
 )
 
 type Claims struct {
@@ -143,17 +151,332 @@ func proxyToAuthService(authServiceURL string) gin.HandlerFunc {
     }
 }
 
-func handleUsers(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Users service - Implementación pendiente",
-        "method": c.Request.Method,
-        "path": c.Request.URL.Path,
-    })
+// gRPC client para usuarios
+func getUsersClient() (pb.UserServiceClient, *grpc.ClientConn, error) {
+    usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+    if usersServiceURL == "" {
+        usersServiceURL = "localhost:50051"
+    }
+    
+    conn, err := grpc.Dial(usersServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    if err != nil {
+        return nil, nil, err
+    }
+    
+    client := pb.NewUserServiceClient(conn)
+    return client, conn, nil
+}
+
+func createUser(c *gin.Context) {
+    client, conn, err := getUsersClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de usuarios: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    var requestBody map[string]interface{}
+    if err := c.ShouldBindJSON(&requestBody); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+        return
+    }
+    
+    // Convertir del JSON a la estructura gRPC
+    // Mapear "name" a first_name si no se proporciona first_name
+    firstName := getString(requestBody, "first_name")
+    lastName := getString(requestBody, "last_name")
+    
+    // Si viene "name" pero no first_name/last_name, dividir el nombre
+    if firstName == "" && lastName == "" {
+        fullName := getString(requestBody, "name")
+        if fullName != "" {
+            parts := strings.Fields(fullName)
+            if len(parts) > 0 {
+                firstName = parts[0]
+            }
+            if len(parts) > 1 {
+                lastName = strings.Join(parts[1:], " ")
+            }
+        }
+    }
+    
+    request := &pb.CreateUserRequest{
+        Email:           getString(requestBody, "email"),
+        Password:        getString(requestBody, "password"),
+        ConfirmPassword: getString(requestBody, "confirm_password"),
+        FirstName:       firstName,
+        LastName:        lastName,
+        Role:            getString(requestBody, "role"),
+    }
+    
+    if request.Role == "" {
+        request.Role = "cliente"
+    }
+    
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    
+    response, err := client.CreateUser(ctx, request)
+    if err != nil {
+        // Map gRPC errors to appropriate HTTP status codes
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error creando usuario: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusCreated, response)
+}
+
+func getUser(c *gin.Context) {
+    client, conn, err := getUsersClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de usuarios: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    userID := c.Param("id")
+    id, err := strconv.ParseInt(userID, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ID de usuario inválido"})
+        return
+    }
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    
+    response, err := client.GetUser(ctx, &pb.GetUserRequest{Id: int32(id)})
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Usuario no encontrado: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, response)
+}
+
+func updateUser(c *gin.Context) {
+    client, conn, err := getUsersClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de usuarios: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    userID := c.Param("id")
+    id, err := strconv.ParseInt(userID, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ID de usuario inválido"})
+        return
+    }
+    
+    var requestBody map[string]interface{}
+    if err := c.ShouldBindJSON(&requestBody); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: " + err.Error()})
+        return
+    }
+    
+    // Mapear campos como en CreateUser
+    firstName := getString(requestBody, "first_name")
+    lastName := getString(requestBody, "last_name")
+    
+    if firstName == "" && lastName == "" {
+        fullName := getString(requestBody, "name")
+        if fullName != "" {
+            parts := strings.Fields(fullName)
+            if len(parts) > 0 {
+                firstName = parts[0]
+            }
+            if len(parts) > 1 {
+                lastName = strings.Join(parts[1:], " ")
+            }
+        }
+    }
+    
+    request := &pb.UpdateUserRequest{
+        Id:        int32(id),
+        Email:     getString(requestBody, "email"),
+        FirstName: firstName,
+        LastName:  lastName,
+    }
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    response, err := client.UpdateUser(ctx, request)
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error actualizando usuario: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, response)
+}
+
+func deleteUser(c *gin.Context) {
+    client, conn, err := getUsersClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de usuarios: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    userID := c.Param("id")
+    id, err := strconv.ParseInt(userID, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ID de usuario inválido"})
+        return
+    }
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    _, err = client.DeleteUser(ctx, &pb.DeleteUserRequest{Id: int32(id)})
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error eliminando usuario: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, gin.H{"message": "Usuario eliminado exitosamente"})
+}
+
+func listUsers(c *gin.Context) {
+    client, conn, err := getUsersClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de usuarios: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    response, err := client.ListUsers(ctx, &pb.ListUsersRequest{})
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error listando usuarios: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, response)
+}
+
+// Función auxiliar para extraer strings del JSON
+func getString(data map[string]interface{}, key string) string {
+    if val, ok := data[key]; ok {
+        if str, ok := val.(string); ok {
+            return str
+        }
+    }
+    return ""
+}
+
+// mapGRPCErrorToHTTP maps gRPC error codes to HTTP status codes
+func mapGRPCErrorToHTTP(err error) int {
+    st, ok := status.FromError(err)
+    if !ok {
+        return http.StatusInternalServerError
+    }
+    
+    switch st.Code() {
+    case codes.OK:
+        return http.StatusOK
+    case codes.InvalidArgument:
+        return http.StatusBadRequest
+    case codes.NotFound:
+        return http.StatusNotFound
+    case codes.AlreadyExists:
+        return http.StatusConflict
+    case codes.PermissionDenied:
+        return http.StatusForbidden
+    case codes.Unauthenticated:
+        return http.StatusUnauthorized
+    case codes.ResourceExhausted:
+        return http.StatusTooManyRequests
+    case codes.FailedPrecondition:
+        return http.StatusPreconditionFailed
+    case codes.Aborted:
+        return http.StatusConflict
+    case codes.OutOfRange:
+        return http.StatusBadRequest
+    case codes.Unimplemented:
+        return http.StatusNotImplemented
+    case codes.Internal:
+        return http.StatusInternalServerError
+    case codes.Unavailable:
+        return http.StatusServiceUnavailable
+    case codes.DataLoss:
+        return http.StatusInternalServerError
+    default:
+        return http.StatusInternalServerError
+    }
+}
+
+// gRPC client para videos
+func getVideosClient() (pb.VideoServiceClient, *grpc.ClientConn, error) {
+    videosServiceURL := os.Getenv("VIDEOS_SERVICE_URL")
+    if videosServiceURL == "" {
+        videosServiceURL = "localhost:50053"
+    }
+    
+    conn, err := grpc.Dial(videosServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    if err != nil {
+        return nil, nil, err
+    }
+    
+    client := pb.NewVideoServiceClient(conn)
+    return client, conn, nil
+}
+
+func listVideos(c *gin.Context) {
+    client, conn, err := getVideosClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de videos: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    response, err := client.ListVideos(ctx, &pb.ListVideosRequest{})
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error listando videos: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, response)
+}
+
+func getVideo(c *gin.Context) {
+    client, conn, err := getVideosClient()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando al servicio de videos: " + err.Error()})
+        return
+    }
+    defer conn.Close()
+    
+    videoID := c.Param("id")
+    
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    response, err := client.GetVideo(ctx, &pb.GetVideoRequest{Id: videoID})
+    if err != nil {
+        statusCode := mapGRPCErrorToHTTP(err)
+        c.JSON(statusCode, gin.H{"error": "Error obteniendo video: " + err.Error()})
+        return
+    }
+    
+    c.JSON(http.StatusOK, response)
 }
 
 func handleVideos(c *gin.Context) {
+    // Fallback for unimplemented video endpoints
     c.JSON(http.StatusOK, gin.H{
-        "message": "Videos service - Implementación pendiente",
+        "message": "Videos service - Endpoint específico no implementado",
         "method": c.Request.Method,
         "path": c.Request.URL.Path,
     })
@@ -233,11 +556,11 @@ func main() {
     // Rutas de usuarios
     userGroup := router.Group("/usuarios")
     {
-        userGroup.POST("", handleUsers)
-        userGroup.GET("/:id", handleUsers)
-        userGroup.PATCH("/:id", handleUsers)
-        userGroup.DELETE("/:id", handleUsers)
-        userGroup.GET("", handleUsers)
+        userGroup.POST("", createUser)
+        userGroup.GET("/:id", getUser)
+        userGroup.PATCH("/:id", updateUser)
+        userGroup.DELETE("/:id", deleteUser)
+        userGroup.GET("", listUsers)
     }
     
     // Rutas de facturas
@@ -253,11 +576,11 @@ func main() {
     // Rutas de videos
     videoGroup := router.Group("/videos")
     {
-        videoGroup.POST("", handleVideos)
-        videoGroup.GET("/:id", handleVideos)
-        videoGroup.PATCH("/:id", handleVideos)
-        videoGroup.DELETE("/:id", handleVideos)
-        videoGroup.GET("", handleVideos)
+        videoGroup.POST("", handleVideos)    // POST /videos - Not implemented yet
+        videoGroup.GET("/:id", getVideo)    // GET /videos/:id
+        videoGroup.PATCH("/:id", handleVideos) // PATCH /videos/:id - Not implemented yet
+        videoGroup.DELETE("/:id", handleVideos) // DELETE /videos/:id - Not implemented yet
+        videoGroup.GET("", listVideos)     // GET /videos
     }
     
     // Rutas de monitoreo

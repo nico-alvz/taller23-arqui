@@ -8,8 +8,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose no está instalado"
+# Docker Compose is now integrated with Docker
+if ! docker compose version &> /dev/null; then
+    echo "❌ Docker Compose no está disponible"
     exit 1
 fi
 
@@ -18,14 +19,14 @@ mkdir -p nginx/logs
 
 # Iniciar servicios
 echo "📦 Construyendo e iniciando contenedores..."
-docker-compose up --build -d
+docker compose up --build -d
 
 echo "⏳ Esperando que los servicios estén listos..."
 sleep 30
 
 # Verificar estado
 echo "🔍 Verificando estado de servicios..."
-docker-compose ps
+docker compose ps
 
 echo "✅ StreamFlow iniciado exitosamente!"
 echo ""

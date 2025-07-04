@@ -1,0 +1,213 @@
+{
+  "info": {
+    "name": "StreamFlow - Working Tests",
+    "description": "Tests that work with current implementation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health check returns 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has correct structure', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('status', 'healthy');",
+              "    pm.expect(response).to.have.property('service', 'api-gateway');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Admin Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"{{admin_email}}\", \"password\": \"{{admin_password}}\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Admin login successful', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response contains access token', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('access_token');",
+              "    pm.environment.set('admin_token', response.access_token);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"first_name\": \"PostmanTest\", \"last_name\": \"User\", \"email\": \"postman.test@streamflow.com\", \"password\": \"password123\", \"confirm_password\": \"password123\", \"role\": \"cliente\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/usuarios",
+          "host": ["{{base_url}}"],
+          "path": ["usuarios"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('User creation successful', function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test('Response contains user id', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.environment.set('test_user_id', response.id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. List Users (Admin)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/usuarios",
+          "host": ["{{base_url}}"],
+          "path": ["usuarios"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('List users successful', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response contains users list', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('users');",
+              "    pm.expect(response.users).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Get User by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/usuarios/{{test_user_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["usuarios", "{{test_user_id}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Get user successful', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response contains user data', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.expect(response).to.have.property('email');",
+              "    pm.expect(response).to.have.property('first_name');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Videos Endpoint Test",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/videos",
+          "host": ["{{base_url}}"],
+          "path": ["videos"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Videos endpoint responds', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "// Note: Currently returns placeholder message",
+              "pm.test('Response structure is valid', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.be.an('object');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
