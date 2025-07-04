@@ -92,7 +92,7 @@ describe('Users Service CRUD E2E Tests', () => {
 
         const response = await TestHelper['httpClient'].post('/usuarios', duplicateUserData);
 
-        expect(response.status).toBe(500); // API currently returns 500 for duplicate email
+        expect(response.status).toBeOneOf([400, 409]); // Proper status for duplicate email
         expect(response.data).toHaveProperty('error'); // API returns 'error' property
         
         console.log('✅ POST /usuarios - Error case passed (duplicate email)');
@@ -353,29 +353,4 @@ describe('Users Service CRUD E2E Tests', () => {
   });
 });
 
-// Custom Jest matchers
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeOneOf(expected: any[]): R;
-    }
-  }
-}
-
-expect.extend({
-  toBeOneOf(received: any, expected: any[]) {
-    const pass = expected.includes(received);
-    if (pass) {
-      return {
-        message: () => `expected ${received} not to be one of ${expected.join(', ')}`,
-        pass: true,
-      };
-    } else {
-      return {
-        message: () => `expected ${received} to be one of ${expected.join(', ')}`,
-        pass: false,
-      };
-    }
-  },
-});
 

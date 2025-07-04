@@ -47,7 +47,7 @@ describe('Auth Service E2E Tests', () => {
 
       const response = await TestHelper['httpClient'].post('/usuarios', userData);
       
-      expect(response.status).toBe(400);
+      expect(response.status).toBeOneOf([400, 409]); // Proper status for duplicate email
       expect(response.data).toHaveProperty('error');
     });
 
@@ -63,7 +63,7 @@ describe('Auth Service E2E Tests', () => {
 
       const response = await TestHelper['httpClient'].post('/usuarios', userData);
       
-      expect(response.status).toBe(500); // API returns 500 for invalid email
+      expect(response.status).toBe(400); // Proper status for invalid email format
     });
 
     test('should reject weak passwords', async () => {
@@ -312,29 +312,4 @@ describe('Auth Service E2E Tests', () => {
   });
 });
 
-// Extend Jest matchers for this test file
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeOneOf(expected: any[]): R;
-    }
-  }
-}
-
-expect.extend({
-  toBeOneOf(received: any, expected: any[]) {
-    const pass = expected.includes(received);
-    if (pass) {
-      return {
-        message: () => `expected ${received} not to be one of ${expected.join(', ')}`,
-        pass: true,
-      };
-    } else {
-      return {
-        message: () => `expected ${received} to be one of ${expected.join(', ')}`,
-        pass: false,
-      };
-    }
-  },
-});
 
